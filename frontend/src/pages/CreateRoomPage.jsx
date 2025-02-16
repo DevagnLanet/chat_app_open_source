@@ -24,7 +24,7 @@ const CreateRoomPage = () => {
   };
 
   const enterRoom = () => {
-    // Extract room key (format: http://localhost:8000/room/<roomKey>)
+    // Extract the room key from the link (assumes format: http://localhost:8000/room/<roomKey>)
     const parts = roomLink.split('/room/');
     if (parts.length === 2) {
       navigate(`/room/${parts[1]}`);

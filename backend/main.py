@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
@@ -67,9 +68,11 @@ async def get_room(room_key: str):
 @app.websocket("/ws/{room_key}")
 async def websocket_endpoint(websocket: WebSocket, room_key: str):
     """
-    Handle a WebSocket connection for real-time signaling or chat.
-    When a message is received, it is broadcast to all connections in the room.
-    The sender receives the message with "me: " prefix and all others with "other: ".
+    Handle a WebSocket connection for real-time signaling, chat, and voice call signaling.
+    
+    - If a message is JSON, it is treated as a signaling message (for WebRTC) and is broadcast unmodified
+      to all other clients in the room.
+    - If a message is plain text, the sender receives "me: <message>" and all others receive "other: <message>".
     """
     print(f"[DEBUG] Attempting WebSocket connection for room: {room_key}")
     if room_key not in rooms:
@@ -88,18 +91,36 @@ async def websocket_endpoint(websocket: WebSocket, room_key: str):
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"[DEBUG] Received message in room {room_key}: {data}")
-            # Broadcast the message:
-            # Sender gets "me: <data>" and others get "other: <data>"
-            for connection in list(room_connections[room_key]):
-                try:
-                    if connection is websocket:
-                        await connection.send_text(f"me: {data}")
-                    else:
-                        await connection.send_text(f"other: {data}")
-                except Exception as e:
-                    print(f"[DEBUG] Error sending message: {e}")
-            rooms[room_key] = datetime.utcnow()  # Refresh room activity timestamp
+            print(f"[DEBUG] Received data in room {room_key}: {data}")
+            
+            # Attempt to parse the message as JSON
+            try:
+                parsed = json.loads(data)
+                is_json = True
+            except json.JSONDecodeError:
+                is_json = False
+
+            if is_json:
+                # Broadcast JSON signaling message unmodified to all connections except sender
+                for connection in list(room_connections[room_key]):
+                    if connection is not websocket:
+                        try:
+                            await connection.send_text(data)
+                        except Exception as e:
+                            print(f"[DEBUG] Error sending JSON message: {e}")
+            else:
+                # For plain text chat messages, add prefixes: sender gets "me:"; others get "other:"
+                for connection in list(room_connections[room_key]):
+                    try:
+                        if connection is websocket:
+                            await connection.send_text(f"me: {data}")
+                        else:
+                            await connection.send_text(f"other: {data}")
+                    except Exception as e:
+                        print(f"[DEBUG] Error sending text message: {e}")
+
+            # Refresh room activity timestamp
+            rooms[room_key] = datetime.utcnow()
     except WebSocketDisconnect:
         print(f"[DEBUG] Client disconnected from room {room_key}")
     finally:
