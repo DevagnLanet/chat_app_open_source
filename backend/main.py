@@ -119,7 +119,7 @@ async def websocket_endpoint(websocket: WebSocket, room_key: str):
                     except Exception as e:
                         print(f"[DEBUG] Error sending text message: {e}")
 
-            # Refresh room activity timestamp
+            
             rooms[room_key] = datetime.utcnow()
     except WebSocketDisconnect:
         print(f"[DEBUG] Client disconnected from room {room_key}")
